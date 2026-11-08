@@ -66,9 +66,6 @@ public final class AgentCar extends Car {
     static final double GATE_TTC = 1.5;
     /** Once a move has started we only abort if the gap gets much worse than what we accepted. */
     static final double GATE_ABORT_FACTOR = 0.6;
-    /** Adaptive cruise control: standstill gap (px) and time gap (s) it keeps to the car ahead. */
-    static final double ACC_MIN_GAP = 25;
-    static final double ACC_HEADWAY = 1.2;
     /** Planner mode: seconds after a lane change before the next one can start (stops weaving). */
     static final double LANE_CHANGE_COOLDOWN = 3.0;
 
@@ -107,7 +104,7 @@ public final class AgentCar extends Car {
     private double jerk;
     private double laneOffsetIntegral;
     private double riskIntegral;
-    private double headwayIntegral;
+    private double tooCloseIntegral;
     private double hardBrakeIntegral;
     private double overSpeedIntegral;
     /** Seconds spent stuck behind a slow car while a better lane was safely open. */
@@ -179,8 +176,8 @@ public final class AgentCar extends Car {
         double laneOffset = Math.abs(x - laneCenter(lane)) / (LANE_WIDTH / 2);
         laneOffsetIntegral += Math.min(1, laneOffset) * dt;
         riskIntegral += collisionRisk() * dt;
-        double headway = headway();
-        if (headway < SAFE_HEADWAY) headwayIntegral += (SAFE_HEADWAY - headway) / SAFE_HEADWAY * dt;
+        double tooClose = TOO_CLOSE_FRACTION * followGap(speed);
+        if (leadGap < tooClose) tooCloseIntegral += (tooClose - leadGap) / tooClose * dt;
         if (decel > HARD_BRAKE) hardBrakeIntegral += (decel - HARD_BRAKE) / (AGENT_BRAKE - HARD_BRAKE) * dt;
         if (speed > SPEED_LIMIT) overSpeedIntegral += (speed - SPEED_LIMIT) / SPEED_LIMIT * dt;
         if (missedOvertake()) missedOvertakeTime += dt;
@@ -224,7 +221,9 @@ public final class AgentCar extends Car {
     private double accFollow(double gap, double carSpeed) {
         if (Double.isNaN(carSpeed)) return Double.POSITIVE_INFINITY;
         double dv = speed - carSpeed;
-        double desired = ACC_MIN_GAP + speed * ACC_HEADWAY + speed * dv / (2 * Math.sqrt(AGENT_ACCEL * HARD_BRAKE));
+        // Settles at followGap(speed) when matching speed; the second term asks for more room while
+        // closing in, so it starts braking early enough to stop at the gap instead of inside it.
+        double desired = followGap(speed) + speed * dv / (2 * Math.sqrt(AGENT_ACCEL * HARD_BRAKE));
         double r = Math.max(0, desired) / Math.max(1, gap);
         return AGENT_ACCEL * (1 - r * r);
     }
@@ -501,7 +500,7 @@ public final class AgentCar extends Car {
     /**
      * Reward progress (which is capped by the speed limit), with a small bonus per overtake and for
      * finishing the episode alive. Penalties for twitchy steering, straddling lane lines,
-     * closing in too fast (low time-to-collision), following closer than {@link Config#SAFE_HEADWAY},
+     * closing in too fast (low time-to-collision), following closer than {@link Config#TOO_CLOSE_FRACTION} of the following distance,
      * harsh braking and speeding. A crash wipes out most of the score; stalling halves it.
      */
     public double fitness() {
@@ -510,7 +509,7 @@ public final class AgentCar extends Car {
         f -= jerk * 0.02;
         f -= laneOffsetIntegral * 0.25;
         f -= riskIntegral * 3.0;
-        f -= headwayIntegral * 2.0;
+        f -= tooCloseIntegral * 2.0;
         f -= hardBrakeIntegral * 2.0;
         f -= overSpeedIntegral * 20.0;
         f -= missedOvertakeTime * 1.0;

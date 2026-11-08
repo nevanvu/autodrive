@@ -64,7 +64,9 @@ and the gap and closing speed of the nearest car behind in each neighbouring lan
   - a **lane-change safety gate** holds a requested change until the target lane has a big enough
     gap ahead and behind (and enough time-to-collision), and aborts a change whose gap closes up.
     The HUD's lane map outlines a held-back lane in amber.
-  - **adaptive cruise control** (the IDM car-following law) keeps a ~1.2 s gap to the car ahead.
+  - **adaptive cruise control** (the IDM car-following law) settles at a gap of **one car length
+    + 0.5 s × speed** to the car ahead (`Config.followGap`), about 2.5 car lengths at 60 km/h and
+    4 at 120 km/h. It leaves extra room while closing in so it can stop in time.
   - lane-keeping steers to the centre of the target lane, with a 3 s pause between lane changes
     so the car can't weave.
 
@@ -80,7 +82,7 @@ each generation for diversity.
 
 **Fitness** (`AgentCar.fitness`):
 `distance/100 + 2·overtakes + 10 if alive at 60 s − 1·lane changes`, minus penalties for:
-- following closer than 1 s (`SAFE_HEADWAY`), even at matched speed
+- following closer than 75% of that gap (`TOO_CLOSE_FRACTION`), even at matched speed
 - closing in too fast (time-to-collision under 1.2 s)
 - harsh braking, twitchy steering, straddling lane lines
 - driving over the speed limit (direct mode)
@@ -127,10 +129,10 @@ Problems that came up during tuning, and how they were fixed:
   collapses, so evolution never climbs toward good passing), adaptive cruise and the coaching
   term.
 
-After ~80 generations, champions typically drive brand-new 60-second highways at ~94 km/h average
-(never above 120), make ~9 overtakes and ~5 deliberate lane changes, keep a gap of 1 s or more
-over 99% of the time, and finished all 50 test highways without a crash. Results vary from run
-to run, as they always do with a genetic algorithm.
+After ~80 generations, champions typically drive brand-new 60-second highways at ~100 km/h average
+(never above 120), make ~13 overtakes and ~7 deliberate lane changes, follow at ~3 car lengths
+(~0.75 s), and finished all 50 test highways without a crash. Results vary from run to run, as
+they always do with a genetic algorithm.
 
 ## Project layout
 
