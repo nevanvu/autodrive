@@ -42,8 +42,14 @@ public final class Config {
     /** Posted speed limit. The planner can't request more; direct control is penalized above it. */
     public static final double SPEED_LIMIT_KMH = 120;
     public static final double SPEED_LIMIT = kmhToPx(SPEED_LIMIT_KMH);
-    /** Minimum time gap to the car ahead in your lane before the score starts dropping (s). */
-    public static final double SAFE_HEADWAY = 1.0;
+    /**
+     * Following distance = FOLLOW_MIN_GAP + FOLLOW_TIME * speed (bumper to bumper). Adaptive cruise
+     * control settles there; at 100 km/h that's about 3.6 car lengths.
+     */
+    public static final double FOLLOW_MIN_GAP = CAR_LENGTH;
+    public static final double FOLLOW_TIME = 0.5;
+    /** Following closer than this fraction of the following distance makes the score drop. */
+    public static final double TOO_CLOSE_FRACTION = 0.75;
     /** Braking harder than this (px/s²) counts as harsh braking. */
     public static final double HARD_BRAKE = 280;
 
@@ -64,6 +70,11 @@ public final class Config {
 
     public static double laneCenter(int lane) {
         return (lane + 0.5) * LANE_WIDTH;
+    }
+
+    /** Gap (px) to keep to the car ahead when driving at {@code speed} (px/s). */
+    public static double followGap(double speed) {
+        return FOLLOW_MIN_GAP + FOLLOW_TIME * speed;
     }
 
     public static double kmhToPx(double kmh) {
