@@ -31,8 +31,21 @@ public final class Config {
     /** How quickly lateral velocity follows the steering command (1/s). */
     public static final double AGENT_LATERAL_RESPONSE = 6.0;
 
+    /** Traffic is a mix of normal cars cruising near the limit and slow vehicles worth overtaking. */
     public static final double TRAFFIC_MIN_SPEED = 170;
     public static final double TRAFFIC_MAX_SPEED = 330;
+    public static final double SLOW_VEHICLE_FRACTION = 0.25;
+    public static final double SLOW_VEHICLE_MAX_SPEED = 220;
+    public static final double CAR_MIN_SPEED = 260;
+
+    // ---- Rules of the road --------------------------------------------------
+    /** Posted speed limit. The planner can't request more; direct control is penalized above it. */
+    public static final double SPEED_LIMIT_KMH = 120;
+    public static final double SPEED_LIMIT = kmhToPx(SPEED_LIMIT_KMH);
+    /** Minimum time gap to the car ahead in your lane before the score starts dropping (s). */
+    public static final double SAFE_HEADWAY = 1.0;
+    /** Braking harder than this (px/s²) counts as harsh braking. */
+    public static final double HARD_BRAKE = 280;
 
     // ---- Sensors ----------------------------------------------------------
     /** Ray directions relative to the car's heading, in degrees (negative = left). */
@@ -51,6 +64,14 @@ public final class Config {
 
     public static double laneCenter(int lane) {
         return (lane + 0.5) * LANE_WIDTH;
+    }
+
+    public static double kmhToPx(double kmh) {
+        return kmh / 3.6 * PX_PER_METER;
+    }
+
+    public static double pxToKmh(double px) {
+        return px / PX_PER_METER * 3.6;
     }
 
     private static double[] toRadians(double[] deg) {

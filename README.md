@@ -17,7 +17,7 @@ You only need a JDK 21+. The Maven wrapper downloads Maven itself.
 ./mvnw test
 ```
 
-Headless training runs about 300 ms per generation. You can load the saved `.brain` file in the UI.
+Headless training runs about 1–2 s per generation. You can load the saved `.brain` file in the UI.
 
 ### Controls
 
@@ -35,10 +35,11 @@ Headless training runs about 300 ms per generation. You can load the saved `.bra
 ## How it works
 
 ```
-sense ─────────────▶ think ──────────────▶ act ─────────────────▶ score
-11 ray sensors       19 → 14 → 9 → 2       planner: lane + speed   distance, overtakes,
-3 doppler (Δv)       tanh MLP              → lane-keep + cruise     survival, smoothness,
-speed, lane pos,                           direct: steer+throttle   time-to-collision
+sense ─────────────▶ think ──────────────▶ act ──────────────────────▶ score
+11 ray sensors       27 → 14 → 9 → 2       planner: lane + speed        distance, survival,
+3 doppler (Δv)       tanh MLP              → safety gate + lane-keep    overtakes, following
+lane radar (8)                             → adaptive cruise ≤ limit    distance, smoothness,
+speed, lane pos,                           direct: steer + throttle     speed limit, crashes
 lat. vel, blinkers
 ```
 
@@ -47,15 +48,30 @@ edges. Each returns 0 for nothing in range and 1 for touching. The three forward
 closing speed (a radar "doppler"). A camera-style detector reports when a neighbouring car's turn
 signal points into your path.
 
+The rays leave blind spots in the next lane (a car just behind your rear corner, or more than
+~170 px back, is invisible to them), so a **lane radar** (`AgentCar.senseLanes`) adds 8 inputs:
+the gap to the car ahead in your lane and how far below the limit it holds you; a *lane gain* for
+the left and right lane (how much faster that lane would let you drive, −1 if there is no lane);
+and the gap and closing speed of the nearest car behind in each neighbouring lane.
+
 **Brain** (`NeuralNetwork`): a fixed-topology feed-forward net. All weights live in one flat array
 (the genome), stored neuron by neuron.
 
 **Control** (`ControlMode`):
-- *Planner*: the network acts as a behaviour planner. It requests lane changes and sets a target
-  speed, and a lane-keeping controller plus cruise control carry out the plan. This mirrors how
-  real autonomous-driving stacks split planning from control. It learns much faster and drives
-  smoothly.
-- *Direct*: end-to-end steering and throttle. It's harder to learn, so it's kept for comparison.
+- *Planner*: the network acts as a behaviour planner. It requests lane changes and sets a desired
+  speed (0 up to the **120 km/h speed limit**, so it can't speed). Controllers carry out the plan,
+  as in real autonomous-driving stacks:
+  - a **lane-change safety gate** holds a requested change until the target lane has a big enough
+    gap ahead and behind (and enough time-to-collision), and aborts a change whose gap closes up.
+    The HUD's lane map outlines a held-back lane in amber.
+  - **adaptive cruise control** (the IDM car-following law) keeps a ~1.2 s gap to the car ahead.
+  - lane-keeping steers to the centre of the target lane, with a 3 s pause between lane changes
+    so the car can't weave.
+
+  The network still decides *when* and *where* to change lanes and how fast to go. That's the
+  part that has to be learned.
+- *Direct*: end-to-end steering and throttle with none of the helpers above. It's harder to learn,
+  so it's kept for comparison. Speeding is penalized in the score.
 
 **Evolution** (`GeneticAlgorithm`): elitism, tournament selection and *neuron-level* crossover. A
 child takes each neuron's whole weight set from one parent, so learned feature detectors aren't
@@ -63,9 +79,20 @@ scrambled. Gaussian mutation grows when progress stalls, and a few random immigr
 each generation for diversity.
 
 **Fitness** (`AgentCar.fitness`):
-`distance/100 + 8·overtakes + 10 if alive at 60 s`, minus small penalties for twitchy steering,
-straddling lane lines and low time-to-collision (tailgating). A crash multiplies the score by 0.75
-and stalling by 0.5.
+`distance/100 + 2·overtakes + 10 if alive at 60 s − 1·lane changes`, minus penalties for:
+- following closer than 1 s (`SAFE_HEADWAY`), even at matched speed
+- closing in too fast (time-to-collision under 1.2 s)
+- harsh braking, twitchy steering, straddling lane lines
+- driving over the speed limit (direct mode)
+- seconds spent stuck behind a slow car while a clearly better lane was safely open. This is a
+  coaching signal: the network never sees it, it only shapes the score.
+
+A crash multiplies the score by 0.3 and stalling by 0.5. Because speed is capped, distance
+rewards *keeping up a good pace*, and overtaking is a means to that, not a goal of its own.
+
+**Traffic** (`Traffic`): cars follow the Intelligent Driver Model and change lanes after signalling.
+About 75% are cars cruising at 94–119 km/h, and 25% are slow vehicles (61–79 km/h) worth
+overtaking. Traffic reacts to the AI car: it brakes for it and won't merge into it.
 
 ## Fighting overfitting (the generalization problem)
 
@@ -81,18 +108,29 @@ This project counters that in several ways (see `Trainer`):
    This is the green line on the chart.
 4. **Sensor noise during training** makes brittle, hair-trigger strategies fail.
 5. **Curriculum.** Traffic density ramps from 55% to 100% over the first ~15 generations.
-6. **Fair comparisons.** Traffic ignores the AI cars, so every genome in an episode faces the same
-   traffic, and any seed reproduces the same scenario exactly.
+6. **Fair comparisons.** Every AI car drives in its own copy of the traffic, built from the same
+   seed, so every genome starts from the same scenario, and any seed reproduces an episode exactly.
+   Each copy reacts only to its own AI car. The other AI cars are drawn as ghosts.
 
-Two problems came up during tuning, and how they were fixed:
+Problems that came up during tuning, and how they were fixed:
 - With direct control and survival-heavy fitness, evolution got stuck on a "timid" driver that
-  trails traffic forever and never overtakes. The fixes were the planner control mode and a higher
-  weight on overtakes.
+  trails traffic forever and never overtakes. The fix was the planner control mode.
 - Most remaining crashes were traffic merging into the car from the side. Adding turn-signal
   detection as an input gave the network a fair warning.
+- With no speed limit and a big overtake bonus, champions drove at up to ~170 km/h and tailgated
+  (under a 1 s gap ~90% of the time). The cause: traffic used to ignore the AI cars, so a car
+  behind would drive straight through you, and the only safe spot was right on the bumper of the
+  car ahead. Reactive traffic, the speed cap and the following-distance penalty fixed that.
+- Champions then waited behind slow cars instead of passing. The fixes were: slow vehicles in the
+  traffic mix (with evenly spread speeds, passing barely paid off), the lane radar's lane-gain
+  inputs, the lane-change cooldown (without it, a near-miss policy weaves and its score
+  collapses, so evolution never climbs toward good passing), adaptive cruise and the coaching
+  term.
 
-After ~60 generations, champions typically finish 83–100% of brand-new 60-second highways without
-crashing. Results vary from run to run, as they always do with a genetic algorithm.
+After ~80 generations, champions typically drive brand-new 60-second highways at ~94 km/h average
+(never above 120), make ~9 overtakes and ~5 deliberate lane changes, keep a gap of 1 s or more
+over 99% of the time, and finished all 50 test highways without a crash. Results vary from run
+to run, as they always do with a genetic algorithm.
 
 ## Project layout
 
@@ -111,5 +149,7 @@ The simulation core (`sim`, `ai`, `train`) has no JavaFX dependency, so it runs 
 
 - NEAT (evolving the topology as well as the weights)
 - Recurrent inputs (feed the previous outputs back in) for smoother plans
-- On-ramps, slower trucks and variable lane counts to stress generalization further
+- On-ramps, variable speed-limit zones (with the limit as a network input) and variable lane
+  counts to stress generalization further
+- Draw slow vehicles as trucks
 - Replace the GA with policy-gradient RL (PPO) and compare sample efficiency

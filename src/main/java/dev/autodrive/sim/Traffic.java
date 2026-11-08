@@ -9,9 +9,9 @@ import static dev.autodrive.sim.Config.LANES;
 /**
  * Owns all traffic cars, keeps them sorted by y (for fast range queries) and drives them.
  * <p>
- * Traffic is completely independent of the AI cars. That means every genome in a generation
- * faces the exact same traffic, so fitness comparisons are fair, and a given seed always
- * reproduces the same scenario.
+ * Each AI car gets its own Traffic built from the same seed, and that traffic reacts to it
+ * (brakes for it, won't merge into it). Every genome starts from the exact same scenario, so
+ * fitness comparisons are fair, and a given seed always reproduces the same episode.
  */
 public final class Traffic {
     // Intelligent Driver Model parameters
@@ -35,6 +35,8 @@ public final class Traffic {
     private int size;
     private double nextRowY = 560;
     private int removedBehind;
+    /** The AI car this traffic reacts to during the current update (null if none / crashed). */
+    private AgentCar ego;
 
     Traffic(long seed, double density, boolean laneChanges, boolean streaming, double initialExtent) {
         this.rnd = new Random(seed);
@@ -71,12 +73,21 @@ public final class Traffic {
 
     // ---- Simulation ---------------------------------------------------------
 
-    void update(double dt) {
+    /**
+     * Advances all traffic by one step. Traffic reacts to {@code ego} (the AI car this traffic
+     * belongs to, or null): it brakes for it like for any other car and won't change lanes into it.
+     */
+    void update(double dt, AgentCar ego) {
+        this.ego = ego != null && ego.alive ? ego : null;
         Arrays.fill(aheadInLane, null);
         // Walk front-to-back so aheadInLane[l] always holds the nearest car in front.
         for (int i = size - 1; i >= 0; i--) {
             TrafficCar c = cars[i];
-            TrafficCar leader = nearer(aheadInLane[c.lane], aheadInLane[c.targetLane]);
+            Car leader = nearer(aheadInLane[c.lane], aheadInLane[c.targetLane]);
+            if (this.ego != null && this.ego.y > c.y && (egoIn(c.lane) || egoIn(c.targetLane))
+                    && (leader == null || this.ego.y < leader.y)) {
+                leader = this.ego;
+            }
             double acc = idm(c, leader);
             c.speed = Math.max(0, c.speed + acc * dt);
             c.braking = acc < -60;
@@ -88,11 +99,15 @@ public final class Traffic {
         sort();
     }
 
-    /** Streaming mode (endless demo): spawn ahead of the agents and drop cars far behind. */
+    /**
+     * Drops cars far behind the agent (they can no longer matter) and, in streaming mode
+     * (endless demo), spawns new ones ahead of it.
+     */
     void maintain(double backY, double frontY) {
-        if (!streaming) return;
-        if (nextRowY < frontY + 1500) nextRowY = frontY + 1500;
-        generateUntil(frontY + 3500);
+        if (streaming) {
+            if (nextRowY < frontY + 1500) nextRowY = frontY + 1500;
+            generateUntil(frontY + 3500);
+        }
         int cut = lowerBound(backY - 1500);
         if (cut > 0) {
             System.arraycopy(cars, cut, cars, 0, size - cut);
@@ -108,9 +123,18 @@ public final class Traffic {
         return a.y < b.y ? a : b;
     }
 
-    private static double idm(TrafficCar c, TrafficCar leader) {
+    /** Is the ego car (partly) in this lane, or merging into it? */
+    private boolean egoIn(int lane) {
+        if (ego.targetLane == lane) return true;
+        double lo = lane * Config.LANE_WIDTH - Car.W / 2, hi = (lane + 1) * Config.LANE_WIDTH + Car.W / 2;
+        return ego.x > lo && ego.x < hi;
+    }
+
+    private static double idm(TrafficCar c, Car leader) {
         double v = c.speed;
-        double free = 1 - Math.pow(v / c.desiredSpeed, 4);
+        double ratio = v / c.desiredSpeed;
+        ratio *= ratio;
+        double free = 1 - ratio * ratio;
         double interaction = 0;
         if (leader != null) {
             double gap = Math.max(1, leader.y - c.y - L);
@@ -162,6 +186,7 @@ public final class Traffic {
     }
 
     private boolean laneFree(TrafficCar c, int lane) {
+        if (ego != null && egoIn(lane) && ego.y > c.y - 150 && ego.y < c.y + 120) return false;
         for (int i = 0; i < size; i++) {
             TrafficCar o = cars[i];
             if (o != c && o.occupies(lane) && o.y > c.y - 150 && o.y < c.y + 120) return false;
@@ -193,7 +218,10 @@ public final class Traffic {
     }
 
     private void spawn(int lane, double y) {
-        double speed = Config.TRAFFIC_MIN_SPEED + rnd.nextDouble() * (Config.TRAFFIC_MAX_SPEED - Config.TRAFFIC_MIN_SPEED);
+        boolean slow = rnd.nextDouble() < Config.SLOW_VEHICLE_FRACTION;
+        double lo = slow ? Config.TRAFFIC_MIN_SPEED : Config.CAR_MIN_SPEED;
+        double hi = slow ? Config.SLOW_VEHICLE_MAX_SPEED : Config.TRAFFIC_MAX_SPEED;
+        double speed = lo + rnd.nextDouble() * (hi - lo);
         int color = rnd.nextInt(TrafficCar.PALETTE_SIZE);
         for (int i = 0; i < size; i++) {
             TrafficCar o = cars[i];

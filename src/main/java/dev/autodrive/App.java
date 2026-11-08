@@ -84,7 +84,7 @@ public final class App extends Application {
 
     private final Label genValue = value(), phaseValue = value(), aliveValue = value(), densityValue = value();
     private final Label bestValue = value(), avgValue = value(), championValue = value();
-    private final Label distValue = value(), overtakeValue = value(), speedValue = value();
+    private final Label distValue = value(), overtakeValue = value(), speedValue = value(), laneChangeValue = value();
     private final Label densitySliderValue = new Label();
     private Button pauseButton, demoButton, saveButton;
     private ComboBox<ControlMode> modeBox;
@@ -331,13 +331,13 @@ public final class App extends Application {
 
         GridPane car = grid();
         row(car, 0, "Speed", speedValue, "Distance", distValue);
-        row(car, 1, "Overtakes", overtakeValue, "", new Label());
+        row(car, 1, "Overtakes", overtakeValue, "Lane changes", laneChangeValue);
 
         chartCanvas = new Canvas(340, 150);
         HBox legend = new HBox(14, legendItem("best", "#4cc9f0"), legendItem("average", "#64748b"), legendItem("validation", "#5fd38d"));
         legend.setAlignment(Pos.CENTER_LEFT);
 
-        netCanvas = new Canvas(340, 330);
+        netCanvas = new Canvas(340, 390);
 
         pauseButton = button("❚❚  Pause", e -> togglePause());
         HBox speeds = new HBox(4);
@@ -438,9 +438,10 @@ public final class App extends Application {
             championValue.setText("none yet");
         }
         if (focus != null) {
-            speedValue.setText(String.format("%.0f km/h", focus.speedKmh()));
+            speedValue.setText(String.format("%.0f / %.0f km/h", focus.speedKmh(), Config.SPEED_LIMIT_KMH));
             distValue.setText(String.format("%.2f km", focus.distance / Config.PX_PER_METER / 1000));
             overtakeValue.setText(Integer.toString(focus.overtakes));
+            laneChangeValue.setText(Integer.toString(focus.laneChanges));
         }
         demoButton.setDisable(!demo && trainer.champion() == null);
         saveButton.setDisable(trainer.champion() == null);
