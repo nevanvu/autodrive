@@ -48,7 +48,7 @@ public final class RoadRenderer {
         drawRoad(g, h, bottom, top);
 
         boolean blinkOn = ((int) (world.time() * 3.2)) % 2 == 0;
-        Traffic traffic = world.traffic();
+        Traffic traffic = world.traffic(focus);
         for (int i = traffic.lowerBound(bottom - L), end = traffic.lowerBound(top + L); i < end; i++) {
             TrafficCar c = traffic.get(i);
             double angle = c.lane != c.targetLane ? Math.signum(c.targetLane - c.lane) * 0.12 : 0;
@@ -293,12 +293,14 @@ public final class RoadRenderer {
         g.fillText(hud.mode(), x + 14, y + 12);
 
         String speed = focus == null ? "--" : String.format("%.0f", focus.speedKmh());
-        g.setFill(Theme.TEXT);
+        boolean speeding = focus != null && focus.speedKmh() > Config.SPEED_LIMIT_KMH + 0.5;
+        g.setFill(speeding ? Theme.DANGER : Theme.TEXT);
         g.setFont(Theme.bold(38));
         g.fillText(speed, x + 12, y + 26);
         g.setFont(Theme.font(13));
         g.setFill(Theme.MUTED);
         g.fillText("km/h", x + 16 + speed.length() * 22, y + 45);
+        drawLimitSign(g, x + 140, y + 46, 16);
 
         g.setFont(Theme.font(12));
         g.setFill(Theme.TEXT);
@@ -326,13 +328,37 @@ public final class RoadRenderer {
         }
     }
 
-    /** Tiny top-down lane map: which lane we're in and where the planner is heading. */
+    /** Round speed-limit sign: red ring, white face, the limit in km/h. */
+    private void drawLimitSign(GraphicsContext g, double cx, double cy, double r) {
+        g.setFill(Color.web("#e5484d"));
+        g.fillOval(cx - r, cy - r, r * 2, r * 2);
+        double inner = r * 0.74;
+        g.setFill(Color.WHITE);
+        g.fillOval(cx - inner, cy - inner, inner * 2, inner * 2);
+        g.setFill(Color.web("#111418"));
+        g.setFont(Theme.bold(11));
+        g.setTextAlign(TextAlignment.CENTER);
+        g.setTextBaseline(VPos.CENTER);
+        g.fillText(String.format("%.0f", Config.SPEED_LIMIT_KMH), cx, cy + 0.5);
+        g.setTextAlign(TextAlignment.LEFT);
+        g.setTextBaseline(VPos.TOP);
+    }
+
+    /**
+     * Tiny top-down lane map: which lane we're in and where the planner is heading. A lane the
+     * planner wants but the safety gate is holding back (no safe gap yet) gets an amber outline.
+     */
     private void drawLaneIndicator(GraphicsContext g, double x, double y, AgentCar a) {
         double lw = 14, hgt = 40;
         for (int l = 0; l < Config.LANES; l++) {
             boolean target = l == a.targetLane && a.mode == dev.autodrive.sim.ControlMode.PLANNER;
             g.setFill(target ? Color.rgb(76, 201, 240, 0.28) : Color.rgb(255, 255, 255, 0.06));
             g.fillRoundRect(x + l * (lw + 3), y, lw, hgt, 4, 4);
+            if (l == a.heldLane) {
+                g.setStroke(Theme.WARM);
+                g.setLineWidth(1.5);
+                g.strokeRoundRect(x + l * (lw + 3) + 0.75, y + 0.75, lw - 1.5, hgt - 1.5, 4, 4);
+            }
         }
         double px = x + a.x / Config.LANE_WIDTH * (lw + 3) - 3.5;
         g.setFill(Theme.EV_BODY);
