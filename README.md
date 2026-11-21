@@ -14,10 +14,17 @@ You only need a JDK 21+. The Maven wrapper downloads Maven itself.
 ./mvnw javafx:run                 # the visual simulator
 ./mvnw package && java -jar target/autodrive.jar   # or as a single jar
 ./mvnw compile exec:java -Dexec.args="60 42 champion.brain"   # headless: 60 gens, seed 42, save champion
+./mvnw compile exec:java@benchmark -Dexec.args="champion.brain"  # score a brain on 50 unseen test highways
 ./mvnw test
 ```
 
-Headless training runs about 1–2 s per generation. You can load the saved `.brain` file in the UI.
+Headless training runs about 1–2 s per generation and ends with the champion's test-set report.
+You can load the saved `.brain` file in the UI.
+
+The benchmark takes `--episodes N`, `--density D` and any number of brain files, which it shows side by
+side, so you can compare a brain before and after a change. It reports crashes (with the seeds, so
+you can replay them), average and top speed, time over the limit, overtakes, lane changes, headway
+percentiles, following gap and time spent too close.
 
 ### Controls
 
@@ -107,10 +114,13 @@ This project counters that in several ways (see `Trainer`):
    Score = ½·mean + ½·worst, so a brain that's brilliant once and crashes elsewhere loses.
 3. **Held-out validation.** The top 5 brains are tested on 10 fixed validation highways they never
    train on. The best of those becomes the **champion**: the brain you watch and save.
-   This is the green line on the chart.
-4. **Sensor noise during training** makes brittle, hair-trigger strategies fail.
-5. **Curriculum.** Traffic density ramps from 55% to 100% over the first ~15 generations.
-6. **Fair comparisons.** Every AI car drives in its own copy of the traffic, built from the same
+   This is the green line on the chart. Because the champion is picked on these highways every
+   generation, it ends up partly tuned to them, so its validation score is optimistic.
+4. **A separate test set.** `Benchmark` scores brains on 50 more highways (seeds 1000000+) that
+   are never used for training or for picking the champion. That's the honest number.
+5. **Sensor noise during training** makes brittle, hair-trigger strategies fail.
+6. **Curriculum.** Traffic density ramps from 55% to 100% over the first ~15 generations.
+7. **Fair comparisons.** Every AI car drives in its own copy of the traffic, built from the same
    seed, so every genome starts from the same scenario, and any seed reproduces an episode exactly.
    Each copy reacts only to its own AI car. The other AI cars are drawn as ghosts.
 
@@ -129,10 +139,12 @@ Problems that came up during tuning, and how they were fixed:
   collapses, so evolution never climbs toward good passing), adaptive cruise and the coaching
   term.
 
-After ~80 generations, champions typically drive brand-new 60-second highways at ~100 km/h average
-(never above 120), make ~13 overtakes and ~7 deliberate lane changes, follow at ~3 car lengths
-(~0.75 s), and finished all 50 test highways without a crash. Results vary from run to run, as
-they always do with a genetic algorithm.
+Training 80 generations with seed 42 (`exec:java -Dexec.args="80 42 champion.brain"`) gives a
+champion with a validation score of 206 but a test-set score of 192. On the 50 test highways it
+drove at 99 km/h on average (never above 120), made 13 overtakes and 7.6 lane changes per
+60-second highway, followed at a median of 3.5 car lengths (0.76 s headway), was too close 0.1% of
+the time, and didn't crash once. Other seeds give different results, as they always do with a
+genetic algorithm. Run the benchmark to measure your own brains.
 
 ## Project layout
 
@@ -141,7 +153,7 @@ src/main/java/dev/autodrive/
   App.java, Launcher.java     JavaFX window, main loop, control panel
   sim/   Config, World, Traffic (IDM car-following + lane changes), AgentCar, TrafficCar, ControlMode
   ai/    NeuralNetwork, Genome, GeneticAlgorithm, BrainIO
-  train/ Trainer (generations, robustness eval, validation), HeadlessTrain
+  train/ Trainer (generations, robustness eval, validation), HeadlessTrain, Benchmark (test set)
   ui/    RoadRenderer, NetworkView, ChartView, Theme
 ```
 
