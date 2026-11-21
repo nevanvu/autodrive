@@ -5,6 +5,7 @@ import dev.autodrive.ai.GeneticAlgorithm;
 import dev.autodrive.sim.AgentCar;
 
 import java.nio.file.Path;
+import java.util.List;
 
 /**
  * Trains without a window, as fast as the CPU allows.
@@ -31,6 +32,13 @@ public final class HeadlessTrain {
         }
         System.out.printf("Champion: generation %d, validation score %.1f%n",
                 trainer.championGeneration(), trainer.championScore());
+        if (trainer.champion() != null) {
+            Benchmark.Report test = Benchmark.run(trainer.champion(), trainer.mode(),
+                    Benchmark.testSeeds(Benchmark.DEFAULT_EPISODES), Benchmark.DEFAULT_DENSITY);
+            System.out.printf("%nTest set (%d highways never used for training or picking the champion):%n",
+                    Benchmark.DEFAULT_EPISODES);
+            System.out.print(Benchmark.format(List.of("champion"), List.of(test)));
+        }
         if (out != null && trainer.champion() != null) {
             BrainIO.save(out, trainer.mode().name(), AgentCar.TOPOLOGY, trainer.champion().genes(),
                     "AutoDrive champion from generation " + trainer.championGeneration()
