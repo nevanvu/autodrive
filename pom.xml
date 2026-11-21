@@ -62,6 +62,15 @@
                 <configuration>
                     <mainClass>dev.autodrive.train.HeadlessTrain</mainClass>
                 </configuration>
+                <executions>
+                    <!-- mvn exec:java@benchmark -> score saved brains on the held-out test highways -->
+                    <execution>
+                        <id>benchmark</id>
+                        <configuration>
+                            <mainClass>dev.autodrive.train.Benchmark</mainClass>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
 
             <!-- mvn package -> target/autodrive.jar (run with java -jar) -->

@@ -42,7 +42,11 @@ public final class Trainer {
 
     private record EvalResult(int epoch, double[] fitness, int champion, double validation) {}
 
-    public static final long[] VALIDATION_SEEDS = {101, 202, 303, 404, 505, 606, 707, 808, 909, 1010};
+    /**
+     * Picks the champion. Because it's used for selection every generation, the champion ends up
+     * partly tuned to these highways; {@link Benchmark} measures it on a separate test set.
+     */
+    public static final long[] VALIDATION_SEEDS ={101, 202, 303, 404, 505, 606, 707, 808, 909, 1010};
     public static final double VALIDATION_DENSITY = 1.0;
     public static final int VALIDATION_CANDIDATES = 5;
     public static final double TRAIN_SENSOR_NOISE = 0.02;
