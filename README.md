@@ -85,7 +85,10 @@ and the gap and closing speed of the nearest car behind in each neighbouring lan
 **Evolution** (`GeneticAlgorithm`): elitism, tournament selection and *neuron-level* crossover. A
 child takes each neuron's whole weight set from one parent, so learned feature detectors aren't
 scrambled. Gaussian mutation grows when progress stalls, and a few random immigrants are added
-each generation for diversity.
+each generation for diversity. Progress is judged on the validation highways, which are the same
+every generation. Training fitness isn't a fair yardstick: each generation drives a new scenario,
+and traffic gets denser during the curriculum, so one easy early scenario used to set a record
+that nothing beat, which kept mutation at full boost for most of the run.
 
 **Fitness** (`AgentCar.fitness`):
 `distance/100 + 2·overtakes + 10 if alive at 60 s − 1·lane changes`, minus penalties for:
@@ -140,11 +143,12 @@ Problems that came up during tuning, and how they were fixed:
   term.
 
 Training 80 generations with seed 42 (`exec:java -Dexec.args="80 42 champion.brain"`) gives a
-champion with a validation score of 206 but a test-set score of 192. On the 50 test highways it
-drove at 99 km/h on average (never above 120), made 13 overtakes and 7.6 lane changes per
-60-second highway, followed at a median of 3.5 car lengths (0.76 s headway), was too close 0.1% of
-the time, and didn't crash once. Other seeds give different results, as they always do with a
-genetic algorithm. Run the benchmark to measure your own brains.
+champion with a validation score of 202 but a test-set score of 192. On the 50 test highways it
+drove at 100 km/h on average (never above 120), made 13 overtakes and 8.5 lane changes per
+60-second highway, followed at a median of 3.4 car lengths (0.74 s headway), was too close 0.1% of
+the time, and didn't crash once. Seeds 7 and 2026 gave test scores of 192 and 193, also with no
+crashes. Other seeds give different results, as they always do with a genetic algorithm. Run the
+benchmark to measure your own brains.
 
 ## Project layout
 

@@ -22,12 +22,12 @@ public final class HeadlessTrain {
         Path out = args.length > 2 ? Path.of(args[2]) : null;
 
         Trainer trainer = new Trainer(new GeneticAlgorithm.Params(), seed);
-        System.out.printf("%4s %9s %9s %11s %9s %8s%n", "gen", "best", "avg", "validation", "density", "ms");
+        System.out.printf("%4s %9s %9s %11s %9s %6s %8s%n", "gen", "best", "avg", "validation", "density", "stag", "ms");
         for (int g = 0; g < generations; g++) {
             long t0 = System.nanoTime();
             Trainer.GenerationStats s = trainer.runGenerationBlocking();
-            System.out.printf("%4d %9.1f %9.1f %11.1f %9.2f %8d%n",
-                    s.generation(), s.best(), s.average(), s.validation(), s.density(),
+            System.out.printf("%4d %9.1f %9.1f %11.1f %9.2f %6d %8d%n",
+                    s.generation(), s.best(), s.average(), s.validation(), s.density(), s.stagnation(),
                     (System.nanoTime() - t0) / 1_000_000);
         }
         System.out.printf("Champion: generation %d, validation score %.1f%n",

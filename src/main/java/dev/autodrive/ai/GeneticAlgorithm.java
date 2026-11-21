@@ -62,14 +62,30 @@ public final class GeneticAlgorithm {
         stagnation = 0;
     }
 
-    /** Builds the next generation from the current fitness values. */
+    /**
+     * Builds the next generation from the current fitness values, judging progress on the best
+     * fitness. Only meaningful when every generation is scored on the same task; otherwise use
+     * {@link #evolve(double)}.
+     */
     public void evolve() {
+        double best = Double.NEGATIVE_INFINITY;
+        for (Genome g : population) best = Math.max(best, g.fitness());
+        evolve(best);
+    }
+
+    /**
+     * Builds the next generation from the current fitness values. Mutation grows while
+     * {@code progressScore} fails to beat its best by 2%, so it must be comparable from one
+     * generation to the next (e.g. a score on fixed validation highways). Fitness from a fresh
+     * scenario each generation isn't: one lucky, easy scenario would set a record that later,
+     * harder ones never beat, and mutation would stay boosted for the rest of the run.
+     */
+    public void evolve(double progressScore) {
         List<Genome> sorted = new ArrayList<>(population);
         sorted.sort(Comparator.comparingDouble(Genome::fitness).reversed());
 
-        double best = sorted.get(0).fitness();
-        if (best > bestEver * 1.02 || bestEver == Double.NEGATIVE_INFINITY) {
-            bestEver = Math.max(bestEver, best);
+        if (progressScore > bestEver * 1.02 || bestEver == Double.NEGATIVE_INFINITY) {
+            bestEver = Math.max(bestEver, progressScore);
             stagnation = 0;
         } else {
             stagnation++;

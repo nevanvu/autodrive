@@ -38,7 +38,9 @@ public final class Trainer {
 
     public enum Phase { DRIVING, EVALUATING }
 
-    public record GenerationStats(int generation, double best, double average, double validation, double density) {}
+    /** {@code stagnation}: generations since the validation score last improved by 2% (drives mutation size). */
+    public record GenerationStats(int generation, double best, double average, double validation, double density,
+                                  int stagnation) {}
 
     private record EvalResult(int epoch, double[] fitness, int champion, double validation) {}
 
@@ -185,8 +187,12 @@ public final class Trainer {
             champion = pop.get(r.champion()).copy();
             championGeneration = ga.generation() + 1;
         }
-        history.add(new GenerationStats(ga.generation() + 1, best, sum / pop.size(), r.validation(), worldDensity));
-        ga.evolve();
+        int generation = ga.generation() + 1;
+        // Judge progress on the validation highways: they're the same every generation, unlike the
+        // training scenario, which changes each time and gets denser during the curriculum.
+        ga.evolve(r.validation());
+        history.add(new GenerationStats(generation, best, sum / pop.size(), r.validation(), worldDensity,
+                ga.stagnation()));
         startGeneration();
     }
 

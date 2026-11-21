@@ -45,6 +45,34 @@ class CoreTest {
     }
 
     @Test
+    void stagnationFollowsTheProgressScoreNotTheFitness() {
+        GeneticAlgorithm ga = new GeneticAlgorithm(AgentCar.TOPOLOGY, new GeneticAlgorithm.Params(), 9);
+        // Generation 1 drives an easy scenario: high fitness. Later ones are harder, so fitness drops,
+        // but the score on the fixed validation highways keeps improving: that's not stagnation.
+        double[] fitness = {300, 150, 160, 170};
+        double[] progress = {100, 110, 125, 140};
+        for (int g = 0; g < fitness.length; g++) {
+            setAllFitness(ga, fitness[g]);
+            ga.evolve(progress[g]);
+            assertEquals(0, ga.stagnation(), "generation " + (g + 1));
+        }
+        // Fitness soars, but validation is flat (or creeps up less than 2%): stagnation counts up.
+        double[] flat = {140, 141, 139};
+        for (int g = 0; g < flat.length; g++) {
+            setAllFitness(ga, 1000 + 100 * g);
+            ga.evolve(flat[g]);
+            assertEquals(g + 1, ga.stagnation());
+        }
+        setAllFitness(ga, 50);
+        ga.evolve(150);
+        assertEquals(0, ga.stagnation(), "a new validation record resets it");
+    }
+
+    private static void setAllFitness(GeneticAlgorithm ga, double f) {
+        for (Genome g : ga.population()) g.setFitness(f);
+    }
+
+    @Test
     void evolutionKeepsPopulationSizeAndElites() {
         GeneticAlgorithm.Params p = new GeneticAlgorithm.Params();
         GeneticAlgorithm ga = new GeneticAlgorithm(AgentCar.TOPOLOGY, p, 5);
