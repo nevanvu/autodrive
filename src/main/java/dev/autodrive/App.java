@@ -551,11 +551,12 @@ public final class App extends Application {
      * (0.75) and autodrive.gifSkip (seconds to drive before recording starts, 3). autodrive.snapshotDemo
      * records the champion's demo. The README's demo.gif:
      * <pre>
-     * java -Dautodrive.seed=42 -Dautodrive.pretrain=80 -Dautodrive.snapshotDemo=true -Dautodrive.demoSeed=18 \
-     *      -Dautodrive.gifSkip=42 -Dautodrive.gifScale=0.72 -Dautodrive.gif=docs/demo.gif -jar target/autodrive.jar
+     * java -Dautodrive.seed=42 -Dautodrive.pretrain=80 -Dautodrive.snapshotDemo=true -Dautodrive.demoSeed=106 \
+     *      -Dautodrive.gifSkip=42.3 -Dautodrive.gifScale=0.72 -Dautodrive.gif=docs/demo.gif -jar target/autodrive.jar
      * </pre>
-     * Highway 18 from 0:42 was picked as the busiest 10 s (most overtakes and lane changes, both ways,
-     * with no crash) out of every window in the first minute of 400 demo highways.
+     * Highway 106 from 0:42.3 was picked from 600 demo highways as the clearest "catch up to a slower
+     * car, slow to its speed and follow while the lane-change gate holds, then change lanes and pass
+     * it" sequence: 120 to 64 km/h behind a 65 km/h car, passing it 7.7 s in and ending at 120 km/h.
      */
     private void startRecordingIfRequested() {
         String path = System.getProperty("autodrive.gif");
