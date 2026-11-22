@@ -1,5 +1,9 @@
 # AutoDrive
 
+[![CI](https://github.com/nevanvu/autodrive/actions/workflows/ci.yml/badge.svg)](https://github.com/nevanvu/autodrive/actions/workflows/ci.yml)
+[![Java 21+](https://img.shields.io/badge/Java-21%2B-orange)](https://adoptium.net/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 **A self-driving car that teaches itself to drive a busy highway.** A population of cars, each
 controlled by a small neural network, is evolved by a genetic algorithm until it can keep a safe
 distance, obey the speed limit and overtake slow traffic. Nobody writes any driving rules.
@@ -122,3 +126,7 @@ src/main/java/dev/autodrive/
 - Evolve the network's structure as well as its weights (NEAT)
 - On-ramps, changing speed limits and different lane counts
 - Compare the genetic algorithm with reinforcement learning (PPO)
+
+## License
+
+[MIT](LICENSE)
