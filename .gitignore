@@ -2,3 +2,6 @@ target/
 *.brain
 .idea/
 *.iml
+
+# Private notes (kept locally, never pushed)
+README.private.md
