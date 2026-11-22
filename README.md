@@ -11,7 +11,7 @@ distance, obey the speed limit and overtake slow traffic. Nobody writes any driv
 Built from scratch in Java 21 and JavaFX: the neural network, the genetic algorithm, the traffic
 simulation and the visualisation, with no machine-learning libraries.
 
-![AutoDrive screenshot](docs/screenshot.png)
+![The trained autopilot overtaking traffic on a 3-lane highway, with its neural network firing live](docs/demo.gif)
 
 ## Results
 

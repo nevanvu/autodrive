@@ -10,6 +10,7 @@ import dev.autodrive.sim.ControlMode;
 import dev.autodrive.sim.World;
 import dev.autodrive.train.Trainer;
 import dev.autodrive.ui.ChartView;
+import dev.autodrive.ui.GifWriter;
 import dev.autodrive.ui.NetworkView;
 import dev.autodrive.ui.RoadRenderer;
 import dev.autodrive.ui.SnapshotUtil;
@@ -32,6 +33,7 @@ import javafx.scene.control.Slider;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.Tooltip;
+import javafx.scene.image.WritableImage;
 import javafx.scene.input.KeyCode;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.GridPane;
@@ -77,7 +79,13 @@ public final class App extends Application {
     private double demoRestartIn = -1;
     private int demoRuns, demoCrashes;
     private double demoBestKm;
-    private final Random demoSeeds = new Random();
+    private final Random demoSeeds = new Random(Long.getLong("autodrive.demoSeed", System.nanoTime()));
+
+    // GIF recording (dev hook, see startRecordingIfRequested)
+    private Scene scene;
+    private GifWriter gif;
+    private int gifFramesLeft, gifStepsPerFrame;
+    private WritableImage gifBuffer;
 
     private AgentCar focus;
     private World focusWorld;
@@ -118,7 +126,7 @@ public final class App extends Application {
         root.setCenter(roadPane);
         root.setRight(side);
 
-        Scene scene = new Scene(root, 1280, 820, Color.web("#0d1014"));
+        scene = new Scene(root, 1280, 820, Color.web("#0d1014"));
         scene.getStylesheets().add(getClass().getResource("/app.css").toExternalForm());
         scene.setOnKeyPressed(e -> {
             if (e.getCode() == KeyCode.SPACE) togglePause();
@@ -139,6 +147,7 @@ public final class App extends Application {
         }.start();
 
         scheduleSnapshotIfRequested(scene);
+        startRecordingIfRequested();
     }
 
     // ---- Main loop ----------------------------------------------------------
@@ -147,7 +156,12 @@ public final class App extends Application {
         double dt = lastFrame == 0 ? 1 / 60.0 : Math.min(0.1, (now - lastFrame) / 1e9);
         lastFrame = now;
 
-        if (!paused) {
+        if (gif != null) {
+            // Recording: advance a fixed amount of sim time per frame, however long capturing takes.
+            dt = gifStepsPerFrame * Config.DT;
+            if (demo) stepDemo(gifStepsPerFrame, Long.MAX_VALUE);
+            else for (int i = 0; i < gifStepsPerFrame; i++) trainer.tick(1, Long.MAX_VALUE);
+        } else if (!paused) {
             long deadline = System.nanoTime() + 12_000_000L;   // keep the UI responsive
             int steps;
             if (Double.isInfinite(speed)) {
@@ -172,6 +186,7 @@ public final class App extends Application {
                 net, AgentCar.INPUT_LABELS, AgentCar.outputLabels(mode));
         chartView.render(chartCanvas.getGraphicsContext2D(), chartCanvas.getWidth(), chartCanvas.getHeight(), trainer.history());
         updateLabels(world);
+        if (gif != null) captureGifFrame();
     }
 
     private void updateFocus(World w) {
@@ -527,5 +542,55 @@ public final class App extends Application {
             Platform.exit();
         });
         pt.play();
+    }
+
+    /**
+     * Dev hook: -Dautodrive.gif=out.gif records the window as a looping GIF and exits. The sim advances
+     * a fixed step per frame, so the recording is smooth and, with fixed seeds, reproducible.
+     * Options: autodrive.gifSeconds (10), autodrive.gifFps (15, must divide 60), autodrive.gifScale
+     * (0.75) and autodrive.gifSkip (seconds to drive before recording starts, 3). autodrive.snapshotDemo
+     * records the champion's demo. The README's demo.gif:
+     * <pre>
+     * java -Dautodrive.seed=42 -Dautodrive.pretrain=80 -Dautodrive.snapshotDemo=true -Dautodrive.demoSeed=106 \
+     *      -Dautodrive.gifSkip=42.3 -Dautodrive.gifScale=0.72 -Dautodrive.gif=docs/demo.gif -jar target/autodrive.jar
+     * </pre>
+     * Highway 106 from 0:42.3 was picked from 600 demo highways as the clearest "catch up to a slower
+     * car, slow to its speed and follow while the lane-change gate holds, then change lanes and pass
+     * it" sequence: 120 to 64 km/h behind a 65 km/h car, passing it 7.7 s in and ending at 120 km/h.
+     */
+    private void startRecordingIfRequested() {
+        String path = System.getProperty("autodrive.gif");
+        if (path == null) return;
+        if (Boolean.getBoolean("autodrive.snapshotDemo") && trainer.champion() != null && !demo) toggleDemo();
+        double seconds = Double.parseDouble(System.getProperty("autodrive.gifSeconds", "10"));
+        int fps = Integer.getInteger("autodrive.gifFps", 15);
+        double scale = Double.parseDouble(System.getProperty("autodrive.gifScale", "0.75"));
+        double skip = Double.parseDouble(System.getProperty("autodrive.gifSkip", "3"));
+        gifStepsPerFrame = Math.max(1, (int) Math.round(1 / (fps * Config.DT)));
+        gifFramesLeft = (int) Math.round(seconds * fps);
+        int skipSteps = (int) Math.round(skip / Config.DT);
+        if (demo) stepDemo(skipSteps, Long.MAX_VALUE);
+        else for (int i = 0; i < skipSteps; i++) trainer.tick(1, Long.MAX_VALUE);
+        try {
+            gif = new GifWriter(new File(path), 1 / (gifStepsPerFrame * Config.DT), scale);
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            Platform.exit();
+        }
+    }
+
+    private void captureGifFrame() {
+        try {
+            gifBuffer = scene.snapshot(gifBuffer);
+            gif.add(SnapshotUtil.toBufferedImage(gifBuffer));
+            if (--gifFramesLeft <= 0) {
+                gif.close();
+                System.out.println("Saved " + gif.frames() + " frames to " + System.getProperty("autodrive.gif"));
+                Platform.exit();
+            }
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            Platform.exit();
+        }
     }
 }
